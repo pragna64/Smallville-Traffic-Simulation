@@ -1,0 +1,314 @@
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.util.*;
+import javax.swing.Timer;
+
+public class MapPanel extends JPanel {
+
+    private final TownGraph graph;
+    private MainFrame mainframe;
+    private java.util.List<Node> route = new ArrayList<>();
+    private Edge selectedge = null;
+    private Edge hoveredge = null;
+    private boolean darkmode = false;
+    private double zoom = 1.0;
+    private int offsetx = 0, offsety = 0;
+    private int lastx, lasty;
+    private int aindex = 0;
+    private Timer atimer;
+    private String startnodeid = "";
+    private String endnodeid = "";
+    private boolean dragging = false;
+
+    public MapPanel(TownGraph graph, MainFrame mainFrame) {
+        this.graph = graph;
+        this.mainframe = mainFrame;
+        setup();
+    }
+
+    public Edge getSelectedEdge() {
+        return selectedge;
+    }
+
+    public java.util.List<Node> getRoute() {
+        return route;
+    }
+
+    public void setRoute(java.util.List<Node> route) {
+        this.route = route;
+        if (route != null && !route.isEmpty()) {
+            startnodeid = route.get(0).id;
+            endnodeid = route.get(route.size() - 1).id;
+        }
+        aindex = 0;
+        if (atimer != null) atimer.stop();
+        atimer = new Timer(30, e -> { 
+            aindex++;
+            repaint();
+        });
+
+        atimer.start();
+    }
+
+    public void toggleDarkMode() {
+        darkmode = !darkmode;
+        repaint();
+    }
+
+    private Point toWorld(int x, int y) {
+        int wx = (int)((x-offsetx)/zoom);
+        int wy = (int)((y-offsety)/zoom);
+        return new Point(wx, wy);
+    }
+
+    private void setup() {
+        addMouseWheelListener(e -> {
+            zoom += -e.getPreciseWheelRotation() *0.1;
+            zoom = Math.max(0.5, Math.min(3.0, zoom));
+            repaint();
+        });
+
+        addMouseListener(new MouseAdapter() {
+            public void mousePressed(MouseEvent e) {
+                dragging = true;
+                lastx = e.getX();
+                lasty = e.getY();
+            }
+
+            public void mouseReleased(MouseEvent e) {
+                dragging = false;
+            }
+
+            public void mouseClicked(MouseEvent e) {
+                Point p = toWorld(e.getX(), e.getY());
+                if (e.getClickCount() == 2){
+                    for (Edge edge : graph.getUniqueEdges()) {
+                        Node s = graph.getNodes().get(edge.sourceid);
+                        Node t = graph.getNodes().get(edge.targetid);
+                        if (lineDist(s, t, p.x, p.y) < 10) {
+                            edge.closed = !edge.closed;
+                            if (mainframe != null) {
+                                mainframe.handleExternalGraphUpdate();
+                                mainframe.updateSliderState();
+                            }
+                            repaint();
+                            return;
+                        }
+                    }
+                }
+                selectedge = null;
+                for (Edge edge : graph.getUniqueEdges()) {
+                    Node s = graph.getNodes().get(edge.sourceid);
+                    Node t = graph.getNodes().get(edge.targetid);
+                    if (lineDist(s, t, p.x, p.y) < 10) {
+                        selectedge = edge;
+                        if (mainframe != null) mainframe.updateSliderState();
+                        repaint();
+                        return;
+                    }
+                }
+                if (mainframe != null) 
+                    mainframe.updateSliderState();
+                repaint();
+            }
+        });
+
+        addMouseMotionListener(new MouseMotionAdapter() {
+            public void mouseDragged(MouseEvent e) {
+                offsetx += e.getX() - lastx;
+                offsety += e.getY() - lasty;
+                lastx = e.getX();
+                lasty = e.getY();
+                repaint();
+            }
+
+            public void mouseMoved(MouseEvent e) {
+                Point p = toWorld(e.getX(), e.getY());
+                hoveredge = null;
+                for (Edge edge : graph.getUniqueEdges()) {
+                    Node s = graph.getNodes().get(edge.sourceid);
+                    Node t = graph.getNodes().get(edge.targetid);
+                    if (lineDist(s, t, p.x, p.y) < 10) {
+                        hoveredge = edge;
+                        break;
+                    }
+                }
+                repaint();
+            }
+        });
+    }
+
+    private double lineDist(Node a, Node b, int px, int py) {
+        if (a == null || b == null) 
+            return 9999;
+        double l2 = Math.pow(b.x - a.x, 2) + Math.pow(b.y - a.y, 2);
+        if (l2 == 0) 
+            return Math.hypot(px - a.x, py - a.y);
+
+        double t = ((px - a.x) * (b.x - a.x) + (py - a.y) * (b.y - a.y)) / l2;
+        t = Math.max(0, Math.min(1, t));
+
+        double x = a.x + t * (b.x - a.x);
+        double y = a.y + t * (b.y - a.y);
+        return Math.hypot(px - x, py - y);
+    }
+
+    private void drawNodeIcon(Graphics2D g2, Node n) {
+        String type = n.type.toLowerCase();
+        int size = 16;
+        int hSize = size / 2;
+        int x = n.x - hSize;
+        int y = n.y - hSize;
+
+        if (type.equals("school")) {
+            g2.setColor(new Color(220, 80, 80));
+            int[] px = {n.x, n.x + hSize, n.x, n.x - hSize};
+            int[] py = {n.y - hSize, n.y, n.y + hSize, n.y};
+            g2.fillPolygon(px, py, 4);
+            g2.setColor(Color.WHITE);
+            g2.setStroke(new BasicStroke(1));
+            g2.drawLine(n.x + hSize, n.y, n.x + hSize, n.y + 6);
+        } 
+        else if (type.equals("shop")) {
+            g2.setColor(new Color(50, 150, 250));
+            g2.fillRect(x, y + 2, size, size - 2);
+            g2.setColor(new Color(30, 100, 200));
+            g2.fillRect(x - 2, y - 2, size + 4, 4);
+        } 
+        else if (type.equals("park")) {
+            g2.setColor(new Color(40, 180, 100));
+            int[] px = {n.x, n.x - hSize, n.x + hSize};
+            int[] py = {n.y - hSize, n.y + hSize, n.y + hSize};
+            g2.fillPolygon(px, py, 3);
+            g2.setColor(new Color(110, 70, 40));
+            g2.fillRect(n.x - 2, n.y + hSize, 4, 4);
+        } 
+        else if (type.equals("hospital")) {
+            g2.setColor(new Color(230, 40, 40));
+            g2.fillOval(x, y, size, size);
+            g2.setColor(Color.WHITE);
+            g2.fillRect(n.x - 2, n.y - 5, 4, 10);
+            g2.fillRect(n.x - 5, n.y - 2, 10, 4);
+        } 
+        else if (type.equals("government")) {
+            g2.setColor(new Color(120, 100, 180));
+            g2.fillRect(x, y + 4, size, size - 4);
+            int[] px = {n.x, n.x - hSize - 2, n.x + hSize + 2};
+            int[] py = {n.y - hSize, n.y + 4, n.y + 4};
+            g2.fillPolygon(px, py, 3);
+        } 
+        else if (type.equals("industrial")) {
+            g2.setColor(new Color(130, 130, 130));
+            g2.fillRect(x, y + 2, size, size - 2);
+            g2.fillRect(n.x + 2, n.y - hSize, 4, hSize + 2);
+        } 
+        else if (type.equals("transport")) {
+            g2.setColor(new Color(240, 160, 20));
+            g2.fillRoundRect(x, y, size, size, 6, 6);
+            g2.setColor(Color.WHITE);
+            g2.fillOval(n.x - 4, n.y - 4, 3, 3);
+            g2.fillOval(n.x + 1, n.y - 4, 3, 3);
+        } 
+        else if (type.equals("residential")) {
+            g2.setColor(new Color(210, 130, 80));
+            g2.fillRect(x + 2, n.y, size - 4, hSize);
+            int[] px = {n.x, n.x - hSize, n.x + hSize};
+            int[] py = {n.y - hSize, n.y, n.y};
+            g2.fillPolygon(px, py, 3);
+        } 
+        else {
+            g2.setColor(darkmode ? Color.WHITE : Color.DARK_GRAY);
+            g2.fillOval(n.x - 4, n.y - 4, 8, 8);
+        }
+    }
+
+    @Override
+    protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+        Graphics2D g2 = (Graphics2D) g;
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2.translate(offsetx, offsety);
+        g2.scale(zoom, zoom);
+        g2.setColor(darkmode ? new Color(30, 30, 30) : new Color(245, 247, 250));
+        g2.fillRect(-5000, -5000, 10000, 10000);
+
+        for (Edge e : graph.getUniqueEdges()) {
+            Node s = graph.getNodes().get(e.sourceid);
+            Node t = graph.getNodes().get(e.targetid);
+            if (s == null || t == null) 
+                continue;
+            if (e.closed) {
+                g2.setColor(Color.DARK_GRAY);
+                g2.setStroke(new BasicStroke(4));
+            } 
+            else if (e.trafficmult > 4) {
+                g2.setColor(Color.ORANGE);
+                g2.setStroke(new BasicStroke(3));
+            } 
+            else {
+                g2.setColor(Color.LIGHT_GRAY);
+                g2.setStroke(new BasicStroke(2));
+            }
+            g2.drawLine(s.x, s.y, t.x, t.y);
+        }
+
+        for (int i = 0; i < Math.min(aindex, route.size() - 1); i++){
+            Node a = route.get(i);
+            Node b = route.get(i + 1);
+            g2.setColor(new Color(0, 180, 80));
+            g2.setStroke(new BasicStroke(6));
+            g2.drawLine(a.x, a.y, b.x, b.y);
+        }
+
+        if (selectedge != null){
+            Node s = graph.getNodes().get(selectedge.sourceid);
+            Node t = graph.getNodes().get(selectedge.targetid);
+
+            if (s != null && t != null) {
+                g2.setColor(Color.YELLOW);
+                g2.setStroke(new BasicStroke(7));
+                g2.drawLine(s.x, s.y, t.x, t.y);
+            }
+        }
+
+        for (Edge e : graph.getUniqueEdges()) {
+            Node s = graph.getNodes().get(e.sourceid);
+            Node t = graph.getNodes().get(e.targetid);
+            if (s == null || t == null)
+                 continue;
+
+            int midX = (s.x + t.x) / 2;
+            int midY = (s.y + t.y) / 2;
+            String weightStr = e.closed ? "X" : String.format("%.1f", e.getWeight());
+            
+            g2.setFont(new Font("Arial", Font.BOLD, 10));
+            FontMetrics fm = g2.getFontMetrics();
+            int strW = fm.stringWidth(weightStr);
+            int strH = fm.getAscent();
+            g2.setColor(Color.WHITE);
+            g2.fillRect(midX - (strW / 2) - 3, midY - (strH / 2) - 2, strW + 6, strH + 4);
+            g2.setColor(Color.BLACK);
+            g2.setStroke(new BasicStroke(1));
+            g2.drawRect(midX - (strW / 2) - 3, midY - (strH / 2) - 2, strW + 6, strH + 4);
+            g2.setColor(e.closed ? Color.RED : Color.BLACK);
+            g2.drawString(weightStr, midX - (strW / 2), midY + (strH / 2) - 1);
+        }
+        for (Node n : graph.getNodes().values())
+            drawNodeIcon(g2, n);
+        g2.setFont(new Font("Arial", Font.BOLD, 11));
+        for (Node n : graph.getNodes().values()) {
+            String label = n.name + " (" + n.id + ")";
+            g2.setColor(new Color(255, 255, 255, 200));
+            g2.fillRoundRect(n.x + 12, n.y - 14, label.length() * 6 + 10, 18, 6, 6);
+            g2.setColor(Color.BLACK);
+            g2.drawString(label, n.x + 16, n.y - 1);
+        }
+        if (hoveredge != null){
+            g2.setColor(Color.BLACK);
+            g2.fillRect(20, 20, 200, 30);
+            g2.setColor(Color.WHITE);
+            g2.drawString("Road: " + hoveredge.roadname, 30, 40);
+        }
+    }
+}
