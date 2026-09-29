@@ -1,0 +1,26 @@
+id,name,type,x,y
+N1,North Gate,intersection,12,95
+N2,Pine & 1st,intersection,20,84
+N3,Pine & 2nd,intersection,29,73
+N4,Oak High School,school,38,66
+N5,Maple Park,park,49,78
+N6,West Market,shop,22,60
+N7,Central Plaza,government,50,55
+N8,City Hall,government,55,50
+N9,Oak Hospital,hospital,68,58
+N10,East Market,shop,75,52
+N11,River Bridge,intersection,82,46
+N12,Indy Gate,industrial,88,36
+N13,Factory Row,industrial,77,28
+N14,South Station,transport,50,18
+N15,South Residential,residential,36,22
+N16,West Residential,residential,16,40
+N17,Library,government,44,48
+N18,Fire Station,government,62,44
+N19,Lakeview Homes,residential,66,74
+N20,Hilltop Church,government,58,88
+N21,Bus Depot,transport,30,50
+N22,Old Mill Road,intersection,70,38
+N23,Creekside Park,park,84,66
+N24,University Annex,school,42,35
+N25,Water Tower,intersection,26,92
